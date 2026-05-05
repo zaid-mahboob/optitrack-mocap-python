@@ -1,7 +1,6 @@
 # optitrack-python
 
-Minimal Python client for the **OptiTrack NatNet** protocol.  
-Get full 6-DOF rigid body state — position, orientation, linear velocity, angular velocity — from any Motive server with three lines of code.
+Minimal Python client for the **OptiTrack NatNet** protocol. Returns full 6-DOF rigid body state — position, orientation, linear velocity, angular velocity — from any Motive server.
 
 No ROS. No heavy dependencies. One config file controls everything.
 
@@ -9,7 +8,7 @@ No ROS. No heavy dependencies. One config file controls everything.
 
 ## Quick start
 
-**1. Edit `config.py`** — set your IPs, body IDs, and capture rate (see [Configuration](#configuration) below).
+**1. Edit `config.py`** — set your IPs, body IDs, and capture rate.
 
 **2. Run:**
 
@@ -43,8 +42,8 @@ python examples/frequency_probe.py --name left_foot
 ```
 optitrack_mocap_python/
 ├── config.py             ← EDIT THIS — all settings in one place
-├── mocap.py              ← client library (no edits needed for normal use)
-├── natnet_sdk/           ← bundled NatNet 4.4 Python SDK (no install required)
+├── mocap.py              ← client library
+├── natnet_sdk/           ← bundled NatNet 4.4 Python SDK
 │   ├── NatNetClient.py
 │   ├── MoCapData.py
 │   └── DataDescriptions.py
@@ -62,111 +61,35 @@ optitrack_mocap_python/
 numpy
 ```
 
-Only one pip dependency. The NatNet SDK is pure Python and bundled in `natnet_sdk/`.
+The NatNet SDK is pure Python and bundled in `natnet_sdk/`.
 
 ---
 
 ## Configuration
 
-**`config.py` is the only file you need to edit.** Every tunable parameter has a comment explaining what it does and where to find the right value.
-
-### Step 1 — Set IPs
+**`config.py` is the only file you need to edit.**
 
 ```python
-# config.py
-
-CLIENT_ADDRESS = "169.254.160.50"   # IP of THIS machine on the MoCap network card
+CLIENT_ADDRESS = "169.254.160.50"   # IP of this machine on the MoCap network card
 SERVER_ADDRESS = "169.254.160.46"   # IP of the machine running Motive
-```
 
-| Parameter | How to find it |
-|---|---|
-| `CLIENT_ADDRESS` | Run `ip addr` on your machine. Look for the NIC connected to the OptiTrack switch — usually a `169.254.x.x` address. |
-| `SERVER_ADDRESS` | In Motive on the server PC: **Edit → Settings → Network → Local Interface** |
+USE_MULTICAST = False   # False = unicast (one client); True = multicast (multiple clients)
 
-Both machines must be on the same subnet (same first three octets, e.g. `169.254.160.x`).
-
-### Step 2 — Set streaming mode
-
-```python
-USE_MULTICAST = False   # False = unicast (default, recommended for one client)
-                        # True  = multicast (needed for multiple simultaneous clients)
-```
-
-In Motive: **Edit → Settings → Streaming → Transmission Type** must match.
-
-### Step 3 — Name your rigid bodies
-
-```python
 BODY_IDS = {
     "left_foot":  100,
     "right_foot": 101,
     "object":      10,
 }
+
+VELOCITY_RATE_HZ = 360   # must match the frame rate set in Motive
 ```
 
-Find body IDs in Motive: **View → Assets → right-click body → Properties → ID**
+`VELOCITY_RATE_HZ` must match the frame rate configured in Motive — run `frequency_probe.py` to confirm.
 
-Use these names everywhere in your code — `BODY_IDS["left_foot"]` — instead of raw integers.
-
-### Step 4 — Set capture rate
-
-```python
-VELOCITY_RATE_HZ = 360
-```
-
-**This must match the frame rate configured in Motive.** If they differ, velocity will be computed at the wrong cadence.
-
----
-
-## Setting the capture frequency
-
-The NatNet publish rate equals the **camera capture frame rate** set in Motive.  
-There is **no software ceiling** — the limit is your camera hardware.
-
-### How to change it in Motive
-
-1. Open Motive on the OptiTrack server PC
-2. **Edit → Settings → Camera → Frame Rate**
-3. Select the desired rate (e.g. 120, 240, 360 Hz)
-4. Click **Apply** (takes effect immediately, no restart)
-5. Run `frequency_probe.py` to confirm
-
-### How to change it in the code
-
-Open `config.py` and update one line:
-
-```python
-VELOCITY_RATE_HZ = 360   # ← change this to match Motive
-```
-
-That's it. Nothing else needs to change.
-
-> **Rule:** `VELOCITY_RATE_HZ` in `config.py` should always equal the frame rate set in Motive.  
-> Run `python examples/frequency_probe.py` after any change to verify they match.
-
-### Camera hardware limits
-
-| Camera series | Max frame rate |
-|---|---|
-| Prime 13 / 13W | 240 Hz |
-| Prime 17W | 360 Hz |
-| PrimeX 13 | 360 Hz |
-| PrimeX 22 | 260 Hz |
-| PrimeX 41 | 180 Hz |
-| Slim 3U | 100 Hz |
-| Flex 13 | 120 Hz |
-
-Check your camera's spec sheet on the [OptiTrack website](https://optitrack.com/cameras/) for the exact limit.
-
-### Buffer depth at high frame rates
-
-At very high frame rates, increase `MAX_SAMPLES_PER_BODY` in `config.py`:
+At very high frame rates, increase `MAX_SAMPLES_PER_BODY` to maintain buffer headroom:
 
 ```python
 # Rule: MAX_SAMPLES_PER_BODY  ≥  VELOCITY_WINDOW_S * VELOCITY_RATE_HZ * 2
-# At 360 Hz: 0.040 * 360 * 2 = 28.8  →  60 gives comfortable headroom
-# At 720 Hz: 0.040 * 720 * 2 = 57.6  →  increase to 80 or 128
 MAX_SAMPLES_PER_BODY = 60
 ```
 
@@ -175,15 +98,13 @@ MAX_SAMPLES_PER_BODY = 60
 ## Examples
 
 ```bash
-# Print live pose (refreshes at 10 Hz)
+# Print live pose
 python examples/read_body.py --name left_foot
 python examples/read_body.py --id 101
 
 # Measure actual NatNet publish rate
 python examples/frequency_probe.py --name right_foot
 ```
-
-The frequency probe auto-detects saturation and prints the recommended value for `VELOCITY_RATE_HZ`.
 
 ---
 
@@ -193,23 +114,9 @@ The frequency probe auto-detects saturation and prints the recommended value for
 from mocap import quat_to_euler_xyz, quat_to_rotmat, euler_xyz_to_quat
 import math
 
-roll, pitch, yaw = quat_to_euler_xyz(quat)           # radians
-roll_deg = math.degrees(roll)
-
-R = quat_to_rotmat(quat)                              # 3×3 numpy array
-
+roll, pitch, yaw = quat_to_euler_xyz(quat)   # radians
+R = quat_to_rotmat(quat)                      # 3×3 numpy array
 quat = euler_xyz_to_quat(roll, pitch, yaw)
-```
-
----
-
-## NATNET_SDK_PATH override
-
-To use a different NatNet SDK version:
-
-```bash
-export NATNET_SDK_PATH=/path/to/NatNet_SDK_x.x/samples/PythonClient
-python examples/read_body.py
 ```
 
 ---

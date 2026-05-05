@@ -214,38 +214,6 @@ python examples/read_body.py
 
 ---
 
-## Known issues and fixes (discovery log)
-
-These bugs were found while running a 230 Hz client loop and are fixed in this client.
-
-### Bug 1 — Pose update rate hard-capped at 50 Hz
-
-**Symptom:** ~76% of control-loop reads returned the exact same position value (stale reads), even though the MoCap hardware was running at 120+ Hz.
-
-**Root cause:** The original NatNet Python client only stored incoming frames in a rolling buffer. A separate background thread — running at a fixed 50 Hz — was the sole writer to the state cache that `get_body_state()` read from. So at a 230 Hz control loop rate, each new pose value was re-read ~4–5 times before the background thread ran again.
-
-**Fix:** Position and orientation are now written into the state cache directly inside the NatNet frame callback, at the full hardware rate. The background thread still exists for velocity computation but is no longer the gatekeeper for pose data.
-
-### Bug 2 — Velocity magnitude wrong at non-50 Hz rates
-
-**Symptom:** After changing the background thread rate from 50 Hz to 360 Hz, linear velocity values were ~7× too large.
-
-**Root cause:** The same variable was used as both the thread sleep interval and the denominator in the finite-difference formula:
-
-```python
-velocity = (avg_pos_2 - avg_pos_1) / self._velocity_dt   # WRONG
-```
-
-At 50 Hz, `_velocity_dt = 20 ms`. At 360 Hz, `_velocity_dt = 2.8 ms` — the denominator shrank by 7×, inflating the velocity.
-
-**Fix:** The denominator is now a fixed constant (`VELOCITY_HALF_S = 20 ms` in `config.py`) completely independent of the loop rate. The two averaging half-windows are always `[now−40ms, now−20ms)` and `[now−20ms, now]`, regardless of how often they are computed.
-
-### Getting above 120 Hz
-
-The NatNet Python SDK and this client impose no upper limit on frame rate. The only limit is the Motive camera frame rate setting and the camera hardware. To go above 120 Hz: open Motive → **Edit → Settings → Camera → Frame Rate** → select a higher value → Apply. Then update `VELOCITY_RATE_HZ` in `config.py` to match.
-
----
-
 ## License
 
 NatNet SDK files in `natnet_sdk/` are provided by NaturalPoint / OptiTrack under their [EULA](https://optitrack.com/software/natnet-sdk/).  
